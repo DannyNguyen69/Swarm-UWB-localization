@@ -1,0 +1,16 @@
+# PX4 1.18 parameters for UWB external vision via a Raspberry Pi on TELEM2.
+# QGroundControl: Vehicle Setup > Parameters > Tools > Load from file. Reboot the vehicle afterwards.
+# EKF2_EV_POS_X/Y/Z (tag position on the frame) are not here: measure and set them yourself.
+#
+# Vehicle-Id	Component-Id	Name	Value	Type
+1	1	MAV_1_CONFIG	102	6
+1	1	MAV_1_MODE	2	6
+1	1	SER_TEL2_BAUD	921600	6
+1	1	EKF2_GPS_CTRL	0	6
+1	1	EKF2_EV_CTRL	1	6
+1	1	EKF2_EV_NOISE_MD	0	6
+1	1	EKF2_EVP_NOISE	0.1	9
+1	1	EKF2_EVP_GATE	5.0	9
+1	1	EKF2_EV_DELAY	5.0	9
+1	1	EKF2_HGT_REF	2	6
+1	1	EKF2_RNG_CTRL	2	6

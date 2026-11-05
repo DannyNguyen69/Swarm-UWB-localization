@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+build/
+data/
+backup/
+logs/
+docs/*.pdf
+dwm1001-examples/
+*.bin
+*.csv

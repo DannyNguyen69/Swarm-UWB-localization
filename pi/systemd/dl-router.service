@@ -1,0 +1,20 @@
+# fc_router at boot: FC serial <-> QGC UDP. Install (paths assume user pi4 and ~/dark-landing):
+#   sudo cp systemd/dl-*.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now dl-router dl-uwb
+#   journalctl -u dl-router -u dl-uwb -f
+[Unit]
+Description=dark-landing fc_router (FC serial to QGC over UDP)
+After=network-online.target
+StartLimitIntervalSec=0
+Wants=network-online.target
+
+[Service]
+User=pi4
+WorkingDirectory=/home/pi4/dark-landing
+EnvironmentFile=/home/pi4/dark-landing/config/uwb.env
+ExecStart=/home/pi4/dark-landing/scripts/run_router.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

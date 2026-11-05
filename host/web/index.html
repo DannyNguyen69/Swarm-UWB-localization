@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UWB Viewer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #6b7385; --line: #e3e6ec;
+    --grid: #e9ecf1; --axis: #c3c9d4; --tag: #e5484d; --ok: #2f9e44; --warn: #e8890c; --bad: #e5484d;
+    --a1: #3b82f6; --a2: #a855f7; --a3: #14b8a6; --a4: #f59e0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11141a; --panel: #1a1e26; --text: #e6e9ef; --muted: #8b93a5; --line: #2a303b;
+      --grid: #1f242d; --axis: #3a4250;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11141a; --panel: #1a1e26; --text: #e6e9ef; --muted: #8b93a5; --line: #2a303b;
+    --grid: #1f242d; --axis: #3a4250;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); }
+  .dot.on { background: var(--ok); }
+  main { display: grid; grid-template-columns: 1fr 340px; gap: 12px; padding: 12px 16px;
+         height: calc(100vh - 50px); }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; height: auto; } #mapwrap { height: 60vh; } }
+  #mapwrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+             overflow: hidden; min-height: 300px; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
+  button { font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 6px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  aside { display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  .big { font-size: 24px; font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { text-align: right; padding: 4px 4px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .banner { background: var(--warn); color: #000; padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+  .hidden { display: none; }
+  kbd { font-family: ui-monospace, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>UWB Viewer</h1>
+  <span class="pill"><span id="dot" class="dot"></span><span id="src">đang kết nối…</span></span>
+  <span class="pill">tần số <b id="rate">–</b>&nbsp;lần đo/s</span>
+  <span class="pill">mất <b id="lost">0</b></span>
+  <span class="pill">lỗi CRC <b id="crc">0</b></span>
+</header>
+<main>
+  <div id="mapwrap">
+    <canvas id="map"></canvas>
+    <div class="tools">
+      <button id="btnCircles">Ẩn vòng tròn</button>
+      <button id="btnTrail">Xóa vệt</button>
+      <button id="btnTheme">Sáng/Tối</button>
+    </div>
+  </div>
+  <aside>
+    <div id="cfgerr" class="banner hidden"></div>
+    <div class="card">
+      <h2>Vị trí tag</h2>
+      <div class="big" id="pos">–</div>
+      <div class="muted" id="posinfo">cần ≥ 3 anchor có khoảng cách mới</div>
+    </div>
+    <div class="card">
+      <h2>Anchor (1 giây gần nhất)</h2>
+      <table>
+        <thead><tr><th>Anchor</th><th>Khoảng cách</th><th>±</th><th>OK/lỗi</th><th>RX</th><th>FP</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="muted" style="margin-top:6px;font-size:12px">± = độ lệch chuẩn (mm). RX/FP = công suất thu / đường đầu tiên (dBm).
+        RX − FP &gt; 6 dB thường là bị che.</div>
+    </div>
+    <div class="card">
+      <h2>Tag</h2>
+      <div id="status" class="muted">chưa có gói STATUS</div>
+    </div>
+    <div class="card">
+      <h2>Tọa độ anchor</h2>
+      <div id="layout" class="muted">–</div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button id="btnResurvey">Calib lại toàn hệ</button>
+        <span id="resurveyMsg" class="muted" style="font-size:12px"></span>
+      </div>
+      <table id="pairtable" class="hidden" style="margin-top:6px">
+        <thead><tr><th>Cặp</th><th>Đo</th><th>±</th><th>Lệch</th></tr></thead>
+        <tbody id="pairs"></tbody>
+      </table>
+      <div id="layoutwarn"></div>
+    </div>
+    <div class="card muted" style="font-size:12px">
+      Độ cao anchor/tag và tọa độ dự phòng lấy từ <kbd>host/anchors.toml</kbd>. Với <kbd>source = "auto"</kbd>,
+      tọa độ lấy từ lần tự calib của tag; reset tag hoặc một anchor để calib lại.
+    </div>
+  </aside>
+</main>
+<script>
+const ANCHOR_COLORS = ["--a1", "--a2", "--a3", "--a4"];
+const TRAIL_MAX = 300;
+let snap = null, trail = [], showCircles = true;
+
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const anchorColor = id => css(ANCHOR_COLORS[(id - 1) % ANCHOR_COLORS.length]);
+const fmt = (v, d = 3) => (v === null || v === undefined) ? "–" : v.toFixed(d);
+
+// ------------------------------------------------------------ data
+function connect() {
+  const es = new EventSource("/events");
+  es.onmessage = e => {
+    snap = JSON.parse(e.data);
+    if (snap.tag) {
+      const last = trail[trail.length - 1];
+      if (!last || Math.hypot(last.x - snap.tag.x, last.y - snap.tag.y) > 0.005) {
+        trail.push({ x: snap.tag.x, y: snap.tag.y });
+        if (trail.length > TRAIL_MAX) trail.shift();
+      }
+    }
+    updatePanel();
+  };
+  es.onerror = () => {
+    document.getElementById("dot").classList.remove("on");
+    document.getElementById("src").textContent = "mất kết nối tới viewer, đang thử lại…";
+  };
+}
+
+function updatePanel() {
+  const s = snap;
+  document.getElementById("dot").classList.toggle("on", s.connected && s.rate > 0);
+  document.getElementById("src").textContent = s.source + (s.connected ? "" : " (chưa kết nối)");
+  document.getElementById("rate").textContent = s.rate;
+  document.getElementById("lost").textContent = s.lost_total;
+  document.getElementById("crc").textContent = s.crc_errors;
+
+  const err = document.getElementById("cfgerr");
+  err.classList.toggle("hidden", !s.config_error);
+  err.textContent = s.config_error || "";
+
+  if (s.tag) {
+    document.getElementById("pos").textContent = `x ${s.tag.x.toFixed(2)}  y ${s.tag.y.toFixed(2)} m`;
+    document.getElementById("posinfo").textContent =
+      `${s.tag.n} anchor, sai số dư ${(s.tag.rms * 100).toFixed(1)} cm, tag cao ${s.tag_height} m`;
+  } else {
+    document.getElementById("pos").textContent = "–";
+    document.getElementById("posinfo").textContent = "cần ≥ 3 anchor có khoảng cách mới";
+  }
+
+  const rows = Object.entries(s.anchors).map(([id, a]) => {
+    const stale = a.age === null || a.age > 0.5;
+    const nlos = a.nlos > 0 ? ` <span title="số lần nghi bị che">⚠${a.nlos}</span>` : "";
+    return `<tr${stale ? ' class="muted"' : ""}>
+      <td><span class="sw" style="background:${anchorColor(+id)}"></span>A${id}${a.xy ? "" : " <span title='chưa có trong anchors.toml'>?</span>"}</td>
+      <td>${a.range === null ? "–" : a.range.toFixed(3) + " m"}</td>
+      <td>${a.std_mm === null ? "–" : a.std_mm.toFixed(0)}</td>
+      <td>${a.n_ok}/${a.n_fail}${nlos}</td>
+      <td>${fmt(a.rx, 1)}</td><td>${fmt(a.fp, 1)}</td></tr>`;
+  });
+  document.getElementById("rows").innerHTML = rows.join("");
+
+  const st = s.status;
+  document.getElementById("status").innerHTML = !st ? "chưa có gói STATUS" :
+    `${st.role} ${st.id} · firmware v${st.fw} · đo ${st.n_anchors} anchor · chạy ${Math.round(st.uptime_s)} s` +
+    (st.radio_ok ? "" : ` · <b style="color:var(--bad)">DW1000 lỗi</b>`) +
+    `<br>${st.calib}` +
+    (st.survey ? `<br>tự calib: <b>${st.survey}</b> (${st.pairs_valid} cặp)` : "");
+
+  const L = s.layout;
+  const fromSurvey = L.source === "survey";
+  document.getElementById("layout").innerHTML = fromSurvey
+    ? `<b>Tự calib</b> (bảng phiên bản ${L.version}) · sai số dư <b>${L.rms_mm.toFixed(1)} mm</b>` +
+      (L.redundancy > 0 ? "" : " (không có phép đo dư)")
+    : (L.pref === "manual" ? "Lấy từ anchors.toml (source = \"manual\")"
+                           : "Lấy từ anchors.toml, đang chờ kết quả tự calib từ tag");
+  document.getElementById("pairtable").classList.toggle("hidden", !fromSurvey);
+  document.getElementById("pairs").innerHTML = !fromSurvey ? "" : (L.pairs || []).map(p =>
+    `<tr><td>A${p.a}–A${p.b}</td><td>${p.dist.toFixed(3)} m</td><td>${p.std}</td>` +
+    `<td>${p.resid_mm >= 0 ? "+" : ""}${p.resid_mm.toFixed(1)}</td></tr>`).join("");
+  document.getElementById("layoutwarn").innerHTML = !fromSurvey ? "" : (L.warnings || []).map(w =>
+    `<div class="banner" style="margin-top:6px">${w}</div>`).join("");
+}
+
+// ------------------------------------------------------------ drawing
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+
+function view(w, h) {
+  const pts = Object.values(snap ? snap.anchors : {}).filter(a => a.xy).map(a => a.xy);
+  if (snap && snap.tag) pts.push([snap.tag.x, snap.tag.y]);
+  if (!pts.length) pts.push([0, 0], [5, 4]);
+  let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+  let y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  const pad = Math.max(x1 - x0, y1 - y0, 2) * 0.15 + 0.5;
+  x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+  const k = Math.min(w / (x1 - x0), h / (y1 - y0));
+  const ox = (w - (x1 - x0) * k) / 2, oy = (h - (y1 - y0) * k) / 2;
+  return {
+    k, x0, x1, y0, y1,
+    sx: x => ox + (x - x0) * k,
+    sy: y => h - (oy + (y - y0) * k),   // +y up, like the map in PLAN.md
+  };
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w * dpr || canvas.height !== h * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const v = view(w, h);
+
+  // grid, 1 m (0.5 m when zoomed in)
+  const step = v.k > 120 ? 0.5 : 1;
+  ctx.lineWidth = 1;
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.fillStyle = css("--muted");
+  for (let x = Math.ceil(v.x0 / step) * step; x <= v.x1; x += step) {
+    ctx.strokeStyle = Math.abs(x) < 1e-9 ? css("--axis") : css("--grid");
+    ctx.beginPath(); ctx.moveTo(v.sx(x), 0); ctx.lineTo(v.sx(x), h); ctx.stroke();
+    if (Math.abs(x % 1) < 1e-9) ctx.fillText(`${x} m`, v.sx(x) + 3, h - 5);
+  }
+  for (let y = Math.ceil(v.y0 / step) * step; y <= v.y1; y += step) {
+    ctx.strokeStyle = Math.abs(y) < 1e-9 ? css("--axis") : css("--grid");
+    ctx.beginPath(); ctx.moveTo(0, v.sy(y)); ctx.lineTo(w, v.sy(y)); ctx.stroke();
+    if (Math.abs(y % 1) < 1e-9) ctx.fillText(`${y} m`, 4, v.sy(y) - 3);
+  }
+
+  if (snap) {
+    const anchors = Object.entries(snap.anchors).filter(([, a]) => a.xy);
+
+    // outline A1→A2→A3→A4
+    const ring = anchors.map(([id, a]) => [+id, a.xy]).sort((p, q) => p[0] - q[0]);
+    if (ring.length > 2) {
+      ctx.strokeStyle = css("--axis"); ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ring.forEach(([, p], i) => i ? ctx.lineTo(v.sx(p[0]), v.sy(p[1])) : ctx.moveTo(v.sx(p[0]), v.sy(p[1])));
+      ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    // range circles (horizontal distance)
+    if (showCircles) {
+      for (const [id, a] of anchors) {
+        if (a.hrange === null || a.age === null || a.age > 1.0) continue;
+        ctx.strokeStyle = anchorColor(+id);
+        ctx.globalAlpha = a.age > 0.5 ? 0.25 : 0.7;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(v.sx(a.xy[0]), v.sy(a.xy[1]), a.hrange * v.k, 0, 2 * Math.PI); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // anchors
+    for (const [id, a] of anchors) {
+      const x = v.sx(a.xy[0]), y = v.sy(a.xy[1]);
+      const alive = a.age !== null && a.age < 1.0;
+      ctx.fillStyle = anchorColor(+id);
+      ctx.globalAlpha = alive ? 1 : 0.35;
+      ctx.fillRect(x - 7, y - 7, 14, 14);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = css("--text");
+      ctx.font = "bold 13px system-ui, sans-serif";
+      ctx.fillText(`A${id}`, x + 10, y - 8);
+      if (a.range !== null && alive) {
+        ctx.font = "11px system-ui, sans-serif"; ctx.fillStyle = css("--muted");
+        ctx.fillText(`${a.range.toFixed(2)} m`, x + 10, y + 6);
+      }
+    }
+
+    // trail
+    if (trail.length > 1) {
+      ctx.strokeStyle = css("--tag"); ctx.lineWidth = 2;
+      for (let i = 1; i < trail.length; i++) {
+        ctx.globalAlpha = i / trail.length * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(v.sx(trail[i - 1].x), v.sy(trail[i - 1].y));
+        ctx.lineTo(v.sx(trail[i].x), v.sy(trail[i].y));
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // tag
+    if (snap.tag) {
+      const x = v.sx(snap.tag.x), y = v.sy(snap.tag.y);
+      ctx.fillStyle = css("--tag");
+      ctx.beginPath(); ctx.arc(x, y, 8, 0, 2 * Math.PI); ctx.fill();
+      ctx.strokeStyle = css("--panel"); ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = css("--text"); ctx.font = "bold 13px system-ui, sans-serif";
+      ctx.fillText(`Tag ${snap.status ? snap.status.id : ""}`, x + 12, y + 4);
+    }
+  }
+  requestAnimationFrame(draw);
+}
+
+// ------------------------------------------------------------ controls
+document.getElementById("btnCircles").onclick = e => {
+  showCircles = !showCircles;
+  e.target.textContent = showCircles ? "Ẩn vòng tròn" : "Hiện vòng tròn";
+};
+document.getElementById("btnTrail").onclick = () => { trail = []; };
+document.getElementById("btnResurvey").onclick = async e => {
+  if (!confirm("Calib lại vị trí 4 anchor? Tag sẽ ngừng đo vị trí vài giây trong lúc đo.")) return;
+  const msg = document.getElementById("resurveyMsg");
+  e.target.disabled = true;
+  msg.textContent = "đang gửi lệnh…";
+  try {
+    const r = await fetch("/api/resurvey", { method: "POST" });
+    const j = await r.json();
+    msg.textContent = j.ok ? "đã gửi, tag sẽ calib khi đủ anchor (cần firmware tag ≥ 0.3)" : "lỗi: " + j.error;
+  } catch (err) {
+    msg.textContent = "lỗi: không gọi được viewer";
+  }
+  setTimeout(() => { e.target.disabled = false; }, 3000);
+};
+document.getElementById("btnTheme").onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("uwb-theme", root.dataset.theme); } catch (e) {}
+};
+try { const t = localStorage.getItem("uwb-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+connect();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

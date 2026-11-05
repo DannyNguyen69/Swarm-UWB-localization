@@ -1,0 +1,29 @@
+# Anchor coordinates for the viewer, in metres, numbered as on the map in PLAN.md section 4:
+#
+#     A4 ●─────────● A3
+#        │         │
+#   +y ↑ │         │
+#     A1 ●─────────● A2
+#     (0,0)  +x →
+#
+# Where the anchor coordinates come from:
+#   "auto"   - from the survey the tag runs once all anchors are on (firmware >= 0.2);
+#              the [anchors] table below is only used until that result arrives
+#   "manual" - always the [anchors] table below
+source = "auto"
+
+# All anchors hang at the same height (m above the floor). Measured by the user, 2026-11-04.
+anchor_height = 1.8
+
+# Height of the tag above the floor. UWB cannot observe it with coplanar anchors, so the viewer
+# uses this to turn 3D ranges into horizontal distances. Set it to the height of the test stand.
+tag_height = 2.3
+
+[anchors]
+# Layout from the 6-pair survey of 2026-11-01 (residual RMS 7 mm). On 2026-11-04 four of the six pairs
+# were re-measured and agree within 23 mm, so the anchors have not moved. Used until the tag's own
+# survey completes (source = "auto"); replace it if you move an anchor.
+1 = [0.0, 0.0]
+2 = [4.027, 0.0]
+3 = [3.672, 5.606]
+4 = [-0.380, 5.166]

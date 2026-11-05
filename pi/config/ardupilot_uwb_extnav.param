@@ -1,0 +1,16 @@
+# ArduPilot Copter 4.7 parameters: PosHold with UWB for horizontal position only, height from baro.
+# UWB comes from a Raspberry Pi on SERIAL2 (MAVLink2, 921600).
+# Mission Planner: Config > Full Parameter List > Load from file > Write Params, then reboot.
+# Not included, set them for your vehicle: VISO_POS_X/Y/Z (tag position on the frame, FRD).
+SERIAL2_PROTOCOL,2
+SERIAL2_BAUD,921
+SERIAL2_OPTIONS,0
+GPS1_TYPE,0
+VISO_TYPE,1
+VISO_DELAY_MS,10
+VISO_POS_M_NSE,0.1
+EK3_SRC1_POSXY,6
+EK3_SRC1_VELXY,0
+EK3_SRC1_POSZ,1
+EK3_SRC1_VELZ,0
+EK3_SRC1_YAW,1

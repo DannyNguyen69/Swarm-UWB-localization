@@ -1,0 +1,21 @@
+# uwb_bridge at boot, after the router. Needs HEADING in config/uwb.env, otherwise it exits and retries.
+[Unit]
+Description=dark-landing UWB bridge (tag to VISION_POSITION_ESTIMATE for ArduPilot)
+After=dl-router.service
+Requires=dl-router.service
+StartLimitIntervalSec=0
+
+[Service]
+User=pi4
+WorkingDirectory=/home/pi4/dark-landing
+EnvironmentFile=/home/pi4/dark-landing/config/uwb.env
+# let fc_router open the serial port and its UDP socket first
+ExecStartPre=/bin/sleep 3
+ExecStart=/home/pi4/dark-landing/scripts/run_uwb.sh
+# steady 30 Hz wins over other jobs on the Pi
+Nice=-5
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
